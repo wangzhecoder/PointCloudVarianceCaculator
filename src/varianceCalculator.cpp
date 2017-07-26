@@ -21,7 +21,7 @@ class VarianceCalculator{
 	public:
 		VarianceCalculator();
 		void callBack(const sensor_msgs::PointCloud2ConstPtr & cloud_msg);
-		std::vector<double> VarianceCalculator(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud);
+		std::vector<double> cut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud);
 		double getVariance(std::vector<double> values);
 		void saveAsPLY(int frameNum,pcl::PointCloud<pcl::PointXYZI>::Ptr cloud);
 		void saveVectorToFile(const char* fileName,std::vector<double> vector);
@@ -31,27 +31,31 @@ class VarianceCalculator{
 		ros::Subscriber pointCloud2_sub;
 		long frameNum;
 		std::vector<double> variance;
-//		pcl::visualization::CloudViewer viewer;
+		pcl::visualization::CloudViewer viewer;
 };
 
 VarianceCalculator::VarianceCalculator()
-	:frameNum(0)
-//	 viewer("Cloud Viewer")
+	:frameNum(0),
+	 viewer("Cloud Viewer")
 {
 	pointCloud2_sub = _nh.subscribe("rslidar_points",1,&VarianceCalculator::callBack,this);
 	variance.clear();
 }
 
-std::vector<double> VarianceCalculator::VarianceCalculator(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
+std::vector<double> VarianceCalculator::cut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
 {
 	std::vector<double> values;
+	pcl::PointCloud<pcl::PointXYZI>::Ptr seg(new pcl::PointCloud<pcl::PointXYZI>);
 	for(long int i = 0;i < cloud->points.size();i++)
 	{
 		if(cloud->points[i].x > -2.025 && cloud->points[i].x <4.276 && cloud->points[i].y < 1.76 && cloud->points[i].y > 0.476)
 		{
+			seg->points.push_back(cloud->points[i]);
+
 			values.push_back(cloud->points[i].y);
 		}
 	}
+	viewer.showCloud(seg);
 	return values;
 }
 
@@ -59,6 +63,8 @@ double VarianceCalculator::getVariance(std::vector<double> values)
 {
 	double sum = std::accumulate(values.begin(), values.end(), 0.0);
 	double mean =  sum / values.size();
+
+	saveValueToFile("mean.txt",mean);
 
 	double accum  = 0.0;
 //	std::for_each (values.begin(), values.end(), [&](const double d) {
@@ -124,9 +130,9 @@ void VarianceCalculator::callBack(const sensor_msgs::PointCloud2ConstPtr & cloud
 
 //		viewer.showCloud(inputCloud);
 
-		std::vector<double> y_values = VarianceCalculator(inputCloud);
+		std::vector<double> y_values = cut(inputCloud);
 		double stdev = getVariance(y_values);
-		saveValueToFile("variance.txt",stdev);
+//		saveValueToFile("variance.txt",stdev);
 	}
 	frameNum++;
 }
