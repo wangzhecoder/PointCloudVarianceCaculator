@@ -24,6 +24,7 @@ class VarianceCalculator{
 		std::vector<std::vector<double> > cut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud);
 		double getVariance(std::vector<double> values);
 		double getMean(std::vector<double> values);
+		double getMode(std::vector<double> values);
 		void saveAsPLY(int frameNum,pcl::PointCloud<pcl::PointXYZI>::Ptr cloud);
 		void saveVectorToFile(const char* fileName,std::vector<double> vector);
 		void saveValueToFile(const char* fileName,double value);
@@ -33,15 +34,18 @@ class VarianceCalculator{
 		ros::Subscriber pointCloud2_sub;
 		long frameNum;
 		std::vector<double> variance;
-		pcl::visualization::CloudViewer viewer;
+//		std::vector<double> means;
+		std::vector<std::vector<double> > modes;
+		// pcl::visualization::CloudViewer viewer;
 };
 
 VarianceCalculator::VarianceCalculator()
-	:frameNum(0),
-	 viewer("Cloud Viewer")
+	:frameNum(0)
+	//  viewer("Cloud Viewer")
 {
 	pointCloud2_sub = _nh.subscribe("rslidar_points",1,&VarianceCalculator::callBack,this);
 	variance.clear();
+	modes.resize(2);
 }
 
 std::vector<std::vector<double> > VarianceCalculator::cut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
@@ -52,7 +56,8 @@ std::vector<std::vector<double> > VarianceCalculator::cut(pcl::PointCloud<pcl::P
 	pcl::PointCloud<pcl::PointXYZI>::Ptr seg(new pcl::PointCloud<pcl::PointXYZI>);
 	for(long int i = 0;i < cloud->points.size();i++)
 	{
-        if(cloud->points[i].x > -2.025 && cloud->points[i].x <2.060 && cloud->points[i].y < 1.76 && cloud->points[i].y > 0.876)
+        // if(cloud->points[i].x > -2.025 && cloud->points[i].x <2.060 && cloud->points[i].y < 1.76 && cloud->points[i].y > 0.876)
+		if(cloud->points[i].x > -0.7 && cloud->points[i].x <0.7 && cloud->points[i].y < 1.76 && cloud->points[i].y > 0.876)
 		{
 			seg->points.push_back(cloud->points[i]);
 			x_values.push_back(cloud->points[i].x);
@@ -61,7 +66,7 @@ std::vector<std::vector<double> > VarianceCalculator::cut(pcl::PointCloud<pcl::P
 	}
 	values.push_back(x_values);
 	values.push_back(y_values);
-	viewer.showCloud(seg);
+	// viewer.showCloud(seg);
 	return values;
 }
 
@@ -93,9 +98,34 @@ double VarianceCalculator::getMean(std::vector<double> values)
 	return mean;
 }
 
+double VarianceCalculator::getMode(std::vector<double> values)
+{
+	std::sort(values.begin(),values.end());
+	double mode = *values.begin();
+	int count = 0;
+	int mode_count = 0;
+	std::vector<double>::iterator it;
+	for(it = values.begin();it!=values.end();it++)
+	{
+		if(*it!=mode)
+		{
+			if(count>mode_count)
+			{
+				mode_count = count;
+				mode = *--it;
+			}
+			count = 1;
+			continue;
+		}
+		count++;
+	}
+
+	return mode;
+}
+
 void VarianceCalculator::saveVectorToFile(const char* fileName,std::vector<double> vector)
 {
-	std::ofstream output(fileName,std::ios::out);
+	std::ofstream output(fileName,std::ios::app);
 	if(! output)
 	{
 		std::cerr << "Open output file error!" << std::endl;
@@ -155,9 +185,22 @@ void VarianceCalculator::callBack(const sensor_msgs::PointCloud2ConstPtr & cloud
 			std::vector<std::vector<double> > values = cut(inputCloud);
 			for(int i = 0;i < 2;i++)
 			{
-				double mean = getMean(values[i]);
-				char * fileName = getASeriesFileName("mean",i);
-				saveValueToFile(fileName,mean);
+//				double mean = getMean(values[i]);
+				double mode = getMode(values[i]);
+//				means.push_back(mean);
+				modes[i].push_back(mode);
+				if(frameNum%1000 == 0 && frameNum!=0)
+				{
+//					char * mean_fileName = getASeriesFileName("mean",i);
+					char * mode_fileName = getASeriesFileName("mode",i);
+//					saveVectorToFile(mean_fileName,means);
+					saveVectorToFile(mode_fileName,modes[i]);
+					ROS_INFO("vector saved!");
+//					means.clear();
+					modes[i].clear();
+//					saveValueToFile(mean_fileName,mean);
+//					saveValueToFile(mode_fileName,mean);
+				}
 			}
 		}
 	}
